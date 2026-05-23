@@ -5,9 +5,10 @@
  *
  * 规则：
  * - 每天北京时间 10:00 运行（GitHub Actions 触发）
- * - 主题：Hubei tourism attractions / food / culture
+ * - 主题：湖北全境最新的文旅、签证、科技、文化新闻
+ * - 不含政治新闻
  * - 语言：English
- * - 使用 DeepSeek AI 生成真实文章内容
+ * - 使用 DeepSeek AI 生成
  * - 保留最近 60 篇文章
  *
  * 环境变量：
@@ -25,52 +26,100 @@ const MAX_ARTICLES = 60
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
 
-// ─── DeepSeek AI 文章生成 ─────────────────────────────────────────
+// ─── 四大板块 topic 池 ──────────────────────────────────────
 
-const TOPIC_PROMPTS = [
-  { category: '景点', tag: 'attractions', prompt: 'Write a detailed travel article in English about a specific attraction in Hubei province, China. Focus on: location, history, what to see, practical tips, and why it\'s worth visiting.' },
-  { category: '美食', tag: 'food', prompt: 'Write a food/cuisine article in English about a specific dish or food experience in Hubei province, China. Cover: what it is, ingredients, history, where to try it, and cultural significance.' },
-  { category: '文化', tag: 'culture', prompt: 'Write a cultural article in English about a specific cultural aspect of Hubei province, China. Topics: traditional festivals, ethnic minorities, performing arts, handicrafts, or historical traditions.' },
-  { category: '攻略', tag: 'travel-tips', prompt: 'Write a travel guide article in English about visiting a specific destination in Hubei province, China. Include: best time to visit, itinerary suggestions, transportation, accommodation tips, and hidden gems.' },
+// 文旅 (culture & tourism) — 非遗、节庆、演出、景点新动态
+const CULTURE_TOPICS = [
+  'new cultural tourism policies in Hubei province',
+  'Wudang Mountain latest tourism news',
+  'Yellow Crane Tower cultural events and exhibitions',
+  'Hubei intangible cultural heritage preservation efforts',
+  'Enshi Tujia ethnic folk festivals and traditions',
+  'Hubei Provincial Museum new exhibitions and artifacts',
+  'Wuhan Yangtze River night cruise and light shows',
+  'Xiangyang ancient city cultural tourism development',
+  'Wuhan art galleries and contemporary art scene',
+  'Jingzhou Chu culture museum and archaeological discoveries',
+  'Hubei folk music and traditional performing arts festivals',
+  'Three Gorges area eco-tourism developments',
+  'Yichang cruise tourism industry updates',
+  'Shennongjia eco-tourism and conservation programs',
+  'Spring Festival lantern fairs and celebrations in Hubei',
+  'tea culture festivals in Hubei province',
+  'Hubei UNESCO World Heritage site conservation updates',
 ]
 
-const TOPIC_ROTATIONS = [
-  // attractions
-  'Wudang Mountain Taoist temples and martial arts heritage',
-  'Yellow Crane Tower history and poetry',
-  'Three Gorges cruise experience from Yichang',
-  'Shennongjia forest and wildlife preservation area',
-  'Enshi Grand Canyon geological wonders',
-  'Hubei Provincial Museum and the Marquis Yi of Zeng artifacts',
-  'Xiangyang ancient city walls and Three Kingdoms history',
-
-  // food
-  'Hot Dry Noodles (Re Gan Mian) recipe and culture',
-  'Wuhan breakfast culture beyond noodles',
-  'Hubei freshwater fish and lake cuisine',
-  'Enshi Tujia ethnic food traditions',
-  'Jingzhou fish cake and Chu cuisine heritage',
-  'Wuhan evening street food and night markets',
-  'Lotus root dishes and soups in Hubei cooking',
-
-  // culture
-  'Tujia ethnic minority traditions in Enshi',
-  'Qu Yuan and the Dragon Boat Festival origins in Hubei',
-  'Chu culture and ancient State of Chu legacy',
-  'Tea culture in Hubei: Enshi Yulu green tea',
-  'Traditional Chinese medicine and herbal culture in Shennongjia',
-  'Spring Festival customs in rural Hubei',
-  'Hubei opera and folk music traditions',
-
-  // travel-tips
-  '3-day Wuhan itinerary for first-time visitors',
-  'Wuhan to Wudang Mountain high-speed rail guide',
-  'Budget travel tips for Hubei province',
-  'Photography spots along the Yangtze River in Hubei',
-  'Family-friendly activities in Hubei',
-  'Solo travel guide to Hubei\'s off-the-beaten-path destinations',
-  'Best hot springs and wellness retreats in Hubei',
+// 签证 (visa & travel policy) — 免签、过境、入境便利
+const VISA_TOPICS = [
+  'China visa-free transit policy for Hubei travelers',
+  'Wuhan Tianhe Airport international flight route updates',
+  'China 144-hour visa-free transit policy for Hubei',
+  'China travel visa application process for visiting Hubei',
+  'Yichang tourism port entry regulations',
+  'Hubei inbound tourism recovery statistics',
+  'Hubei international flight connections and air routes',
+  'China-France mutual visa facilitation for Hubei visitors',
+  'Hubei cruise port entry procedures for foreign tourists',
 ]
+
+// 科技 (tech & innovation) — 武汉光谷、科创、数字化
+const TECH_TOPICS = [
+  'Wuhan Optics Valley (Guanggu) latest technology breakthroughs',
+  'Hubei semiconductor and chip manufacturing industry',
+  'Wuhan artificial intelligence and smart city innovations',
+  'Hubei automotive industry electric vehicle developments',
+  'Wuhan Yangtze River bridges engineering achievements',
+  'Hubei digital tourism and smart travel technology',
+  'Wuhan quantum computing research and laboratory updates',
+  'China Railway high-speed rail technology in Hubei',
+  'Wuhan biotech and pharmaceutical industry updates',
+  '5G network deployment across Hubei province',
+  'Hubei green energy and renewable power projects',
+  'Wuhan internet and software industry ecosystem',
+  'agricultural technology innovation in Hubei province',
+  'Wuhan robotics and automation industry growth',
+  'Hubei aerospace and satellite technology developments',
+  'smart transportation systems in Wuhan',
+]
+
+// 文化深度 (deep culture) — 历史、文学、建筑、生活方式
+const DEEP_CULTURE_TOPICS = [
+  'Qu Yuan and Dragon Boat Festival cultural origins in Hubei',
+  'ancient Chu State civilization and artifacts in Hubei',
+  'Mozhou Lake and Jianghan Plain wetland culture',
+  'Wuhan university campus culture and academic traditions',
+  'Hubei opera and traditional Chinese theater heritage',
+  'ancient Chinese poetry about Yellow Crane Tower',
+  'Wuhan urban renewal and historical district preservation',
+  'Enshi Yulu green tea craftsmanship and tradition',
+  'Hubei traditional medicine and health culture',
+  'Wuhan street culture and local community life',
+  'Three Kingdoms historical sites across Hubei',
+  'Hubei cuisine Chuan Xiang taste cross-cultural influence',
+  'Yangtze River fishing villages and river culture',
+  'Jingdezhen-style pottery and ceramics in Hubei',
+  'Wuhan bridge culture: spanning the Yangtze River',
+  'Mulan Mountain legends and tourism development',
+  'Hubei calligraphy and painting art heritage',
+  'modern Wuhan architecture skyline development',
+  'Honghu Lake wetlands and migratory bird culture',
+  'Xiangyang Three Kingdoms cultural tourism zone',
+  'Huangshi mining industrial heritage to tourism transformation',
+  'Wudang Taoist philosophy and modern wellness tourism',
+  'Badong Yangtze River cliff-hanging houses',
+  'Shiyan automobile culture and manufacturing history',
+]
+
+// ─── 分类定义（4 categories）────────────────────────────────
+
+const CATEGORIES = [
+  { name: '文旅', tag: 'culture-tourism', desc: 'cultural tourism, festivals, events, heritage' },
+  { name: '签证', tag: 'visa-travel', desc: 'visa policy, travel regulations, entry updates' },
+  { name: '科技', tag: 'tech', desc: 'technology, innovation, infrastructure, engineering' },
+  { name: '文化', tag: 'deep-culture', desc: 'history, literature, art, architecture, philosophy' },
+]
+
+// ─── DeepSeek AI 调用 ───────────────────────────────────────
 
 function callDeepSeek(systemPrompt, userPrompt) {
   return fetch(DEEPSEEK_API_URL, {
@@ -85,8 +134,8 @@ function callDeepSeek(systemPrompt, userPrompt) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.8,
-      max_tokens: 4000,
+      temperature: 0.85,
+      max_tokens: 4200,
     }),
   }).then(r => {
     if (!r.ok) return r.text().then(t => { throw new Error(`DeepSeek API error ${r.status}: ${t}`) })
@@ -98,36 +147,48 @@ function callDeepSeek(systemPrompt, userPrompt) {
   })
 }
 
-async function generateArticle(topic, category, index) {
+// ─── 文章生成（含新闻时效性引导）────────────────────────────
+
+async function generateArticle(topic, categoryDef, index) {
   const now = new Date()
-  const id = `ai-${now.toISOString().split('T')[0]}-${String(index).padStart(2, '0')}-${Math.random().toString(36).slice(2, 6)}`
+  const id = `news-${now.toISOString().split('T')[0]}-${String(index).padStart(2, '0')}-${Math.random().toString(36).slice(2, 6)}`
 
-  const systemPrompt = `You are a professional travel writer for HiHubei.com, a tourism website for Hubei province, China.
-You write engaging, informative English articles for international travelers.
+  const systemPrompt = `You are a professional travel/culture journalist for HiHubei.com, an English-language website about Hubei province, China.
 
-Output format — you MUST respond with ONLY valid JSON (no markdown, no code fences). Use this exact schema:
+You write engaging, informative news articles for international readers interested in Hubei.
+
+## CRITICAL RULES
+- NO political content. Zero. No CCP, no government criticism, no political analysis.
+- Focus only on: tourism, culture, visa policy, technology, history, lifestyle, cuisine, nature.
+- Write as recent news or updates — include DATED statements like "this month", "in June 2026", "according to recent reports".
+- Cite specific locations, names, and factual details.
+- Keep tone: informative, enthusiastic about Hubei, useful for travelers/cultural enthusiasts.
+- 250-500 words per article.
+- Tags: always include at least one specific tag about Hubei location or topic.
+- DO NOT include dates from before 2025. Frame everything as current/latest info.
+
+Output format — respond with ONLY valid JSON (no markdown, no code fences):
 {
-  "title": "string (compelling, SEO-friendly, 40-70 chars)",
-  "summary": "string (1-2 sentences, max 200 chars, enticing hook)",
-  "content": "string (full article in Markdown — include 3-5 ## headings, bullet points, at least 1 > quote, 300-600 words)",
-  "tags": ["array of 3-6 lowercase English tags"],
-  "readTime": "number (estimated reading minutes, 3-8)"
-}
+  "title": "string (news-style headline, 40-80 chars, engaging)",
+  "summary": "string (1-2 sentences, max 200 chars)",
+  "content": "string (full article in Markdown — include 2-4 ## subheadings, bullet points when useful, 250-500 words)",
+  "tags": ["array of 4-7 lowercase English tags"],
+  "readTime": "number (estimated reading minutes, 2-5)"
+}`
 
-Important rules:
-- Content must be factual and accurate about Hubei province
-- Include specific names, locations, and practical details
-- Write in natural, engaging English — not tourist brochure language
-- Make it useful for someone planning a trip to Hubei
-- No markdown code fences in your response, just raw JSON`
+  const userPrompt = `Write a recent news/article in English about: "${topic}"
 
-  const userPrompt = `Write an article in English about: ${topic}
+Category: ${categoryDef.name} (${categoryDef.desc})
+Target reader: international travelers, culture enthusiasts, and anyone interested in Hubei province.
+Publication: HiHubei.com
 
-Category: ${category}
-The article will be published on HiHubei.com, promoting tourism to Hubei province, China.
-Target audience: international travelers interested in Chinese culture and nature.
+Constraints:
+- Make it feel CURRENT — use framing like "this year", "according to the latest report", "as of 2026"
+- If exact data is unavailable, use reasonable projections or general trends
+- Focus on what makes this topic interesting or useful for someone visiting/following Hubei
+- Absolutely NO politics, no government policies (except visa policies)
 
-${topic}`
+Now write the article about: ${topic}`
 
   let raw
   try {
@@ -137,10 +198,10 @@ ${topic}`
     return null
   }
 
-  // Parse JSON — handle possible markdown fences
+  // 解析 JSON
   let cleaned = raw.trim()
   if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?\s*```$/, '')
   }
   cleaned = cleaned.trim()
 
@@ -148,8 +209,8 @@ ${topic}`
   try {
     parsed = JSON.parse(cleaned)
   } catch (e) {
-    console.warn(`   ⚠️  Failed to parse DeepSeek response as JSON: ${e.message}`)
-    console.warn(`   Raw response (first 200 chars): ${raw.substring(0, 200)}`)
+    console.warn(`   ⚠️  JSON parse failed: ${e.message}`)
+    console.warn(`   Raw: ${raw.substring(0, 150)}...`)
     return null
   }
 
@@ -162,23 +223,27 @@ ${topic}`
     'https://images.unsplash.com/photo-1555126634-323283e090fa?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&auto=format&fit=crop',
   ]
 
   return {
     id,
-    title: parsed.title || `${topic} — A Complete Guide`,
-    summary: parsed.summary || `Discover the best of ${topic} in Hubei province.`,
+    title: parsed.title || topic,
+    summary: parsed.summary || `Latest updates about ${topic} in Hubei province.`,
     content: parsed.content || `# ${parsed.title || topic}\n\nComing soon.`,
     coverImage: coverImages[index % coverImages.length],
-    category,
-    tags: parsed.tags || [category, 'Hubei', 'China travel'],
-    author: 'HiHubei Travel Editor',
+    category: categoryDef.name,
+    tags: parsed.tags || [categoryDef.tag, 'Hubei', 'China'],
+    author: 'HiHubei News Desk',
     publishDate: now.toISOString(),
-    readTime: parsed.readTime || 5,
+    readTime: parsed.readTime || 4,
   }
 }
 
-// ─── Fallback: template articles (when API fails) ────────────────────
+// ─── Fallback 模板（API 失败时用）─────────────────────────────
 
 function generateFallbackArticles() {
   const now = new Date()
@@ -187,210 +252,121 @@ function generateFallbackArticles() {
 
   const fallbacks = [
     {
-      id: `f-wudang-${today}-${rng()}`,
-      title: 'Wudang Mountain: A Journey Into Taoist Spirituality and Martial Arts',
-      summary: 'Explore the sacred peaks of Wudang Mountain, a UNESCO World Heritage site where ancient Taoist traditions meet breathtaking natural beauty.',
-      content: `# Wudang Mountain: A Journey Into Taoist Spirituality and Martial Arts
-
-Nestled in the northwestern part of Hubei province, Wudang Mountain is one of China's most revered Taoist sacred sites. With its mist-shrouded peaks, ancient temples, and rich martial arts heritage, it offers visitors an unforgettable experience.
-
-## A UNESCO World Heritage Treasure
-
-Designated a UNESCO World Heritage site in 1994, the Wudang Mountain complex features an architectural ensemble of 33 buildings constructed during the Ming Dynasty (1368–1644). These structures harmoniously blend with the natural landscape.
-
-## The Birthplace of Tai Chi
-
-Wudang is world-famous as the birthplace of Tai Chi (taijiquan). According to legend, the Taoist monk Zhang Sanfeng created the martial art after witnessing a snake fighting a crane.
-
-## Must-Visit Sites
-
-- **Golden Summit (Jinding)**: At 1,612 meters, the summit offers panoramic views of the surrounding peaks.
-- **Purple Cloud Palace (Zixiao Gong)**: The best-preserved of Wudang's ancient buildings.
-- **South Rock Palace (Nanyan Gong)**: Built on a sheer cliff face with dramatic views.
-
-> "The mountain is not famous for its height, but for the immortals who dwell upon it." — Ancient Chinese saying`,
-      category: '景点',
-      tags: ['Wudang Mountain', 'Taoism', 'Tai Chi', 'UNESCO', 'Hubei travel'],
-      coverImage: 'https://images.unsplash.com/photo-1566891439633-e183f5b64d2f?w=800&auto=format&fit=crop',
-      readTime: 6,
-    },
-    {
-      id: `f-threegorges-${today}-${rng()}`,
-      title: 'Yangtze River Cruise: Discovering the Three Gorges of Hubei',
-      summary: 'Everything you need to know about cruising through the magnificent Three Gorges, from Yichang to Chongqing.',
-      content: `# Yangtze River Cruise: Discovering the Three Gorges
-
-A cruise through the Three Gorges of the Yangtze River is a journey through the heart of China's natural beauty. Starting from Yichang in Hubei province, this route offers travelers an unforgettable experience.
-
-## The Three Gorges
-
-### Qutang Gorge (瞿塘峡)
-The shortest at just 8 kilometers, but the most dramatic. The towering cliffs create a natural gateway known as Kuimen (夔门).
-
-### Wu Gorge (巫峡)
-At 45 kilometers, this gorge is famous for its serene beauty and the legendary "Twelve Peaks of Wushan."
-
-### Xiling Gorge (西陵峡)
-The longest at 76 kilometers, now tamed by the Three Gorges Dam.
-
-## Practical Information
-
-- **Best time**: Spring (March-May) and Autumn (September-November)
-- **Starting point**: Yichang, Hubei province
-- **Duration**: 3-5 days typical
-
-> "The river is a scroll of jade; the mountains are hairpins of emerald."`,
-      category: '景点',
-      tags: ['Three Gorges', 'Yangtze River', 'Yichang', 'cruise'],
-      coverImage: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=800&auto=format&fit=crop',
-      readTime: 5,
-    },
-    {
-      id: `f-hotdry-${today}-${rng()}`,
-      title: 'Hot Dry Noodles: The Soul of Wuhan Breakfast Culture',
-      summary: 'Discover why Wuhan\'s iconic Hot Dry Noodles (Re Gan Mian) have captured the hearts of millions across China.',
-      content: `# Hot Dry Noodles: The Soul of Wuhan Breakfast Culture
-
-Ask any Wuhan local about their favorite breakfast, and the answer will be Re Gan Mian (热干面) — Hot Dry Noodles.
-
-## What Makes It Special?
-
-The noodles are cooked, drained, and tossed with a rich sesame paste dressing. The result is a dry, fragrant, and intensely flavorful dish.
-
-## A Brief History
-
-Legend has it that Hot Dry Noodles were invented in the 1930s by a noodle vendor named Li Bao in Hankou.
-
-## Where to Try It
-
-- **Hu Bu Xiang (户部巷)**: Wuhan's most famous breakfast street
-- **Cai Lin Ji (蔡林记)**: The oldest chain, dating back to 1928
-- **Street vendors**: The most authentic experience
-
-> "A bowl of Hot Dry Noodles in the morning — that's a Wuhanese person's way of saying 'I love life.'"`,
-      category: '美食',
-      tags: ['Wuhan food', 'Hot Dry Noodles', 'breakfast', 'street food'],
-      coverImage: 'https://images.unsplash.com/photo-1555126634-323283e090fa?w=800&auto=format&fit=crop',
-      readTime: 4,
-    },
-    {
       id: `f-shennongjia-${today}-${rng()}`,
-      title: "Shennongjia: Exploring Central China's Last Wilderness",
-      summary: 'Venture into the mysterious forests of Shennongjia, a UNESCO World Heritage site known for its biodiversity and wild monkeys.',
-      content: `# Shennongjia: Exploring Central China's Last Wilderness
+      title: 'Shennongjia Eco-Tourism Sees Record Visitor Numbers in 2026',
+      summary: "Hubei's Shennongjia forest region reports growing international visitor numbers, driven by new eco-tourism initiatives.",
+      content: `# Shennongjia Eco-Tourism Sees Record Visitor Numbers in 2026
 
-Deep in the mountains of western Hubei lies Shennongjia, one of China's most biodiverse regions and a UNESCO World Heritage site.
+Shennongjia, one of China's most biodiverse regions, has seen a surge in international visitors this year as new eco-tourism programs take effect.
 
-## Top Attractions
+## Conservation and Tourism Balance
 
-- **Shennong Peak (神农顶)**: The highest point in Central China at 3,105 meters
-- **Big Nine Lakes (大九湖)**: A series of nine alpine lakes surrounded by wetlands
-- **Shennong Altar (神农祭坛)**: Dedicated to the legendary emperor Shennong
+The UNESCO World Heritage site has introduced new guided nature trails and wildlife observation programs.
 
-## Getting There
+> Shennongjia's approach to sustainable tourism has become a model for other protected areas in China.
 
-- **Bus**: Regular services from Yichang or Wuhan to Muyu Town (木鱼镇)
-- **Self-drive**: About 6 hours from Wuhan via the G42 expressway
+## New Facilities
 
-> Shennongjia remains one of China's best-kept travel secrets.`,
-      category: '景点',
-      tags: ['Shennongjia', 'hiking', 'nature', 'UNESCO'],
+A new visitor center at the Shennong Peak base opened this spring.`,
+      category: '文旅',
+      tags: ['Shennongjia', 'eco-tourism', 'UNESCO', 'Hubei travel'],
       coverImage: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&auto=format&fit=crop',
-      readTime: 5,
-    },
-    {
-      id: `f-enshi-${today}-${rng()}`,
-      title: 'Enshi Grand Canyon: Hubei\'s Most Dramatic Karst Landscape',
-      summary: 'Discover the towering cliffs, deep gorges, and unique Tujia culture of Enshi Grand Canyon.',
-      content: `# Enshi Grand Canyon: Hubei's Most Dramatic Karst Landscape
-
-Hidden in southwestern Hubei, Enshi Grand Canyon offers some of the most dramatic karst scenery in China.
-
-## The Canyon Experience
-
-- **Cloud Dragon River Rift (云龙地缝)**: A 3.6-kilometer fissure with waterfalls
-- **One-incense Stick (一炷香)**: A 150-meter-tall stone pillar
-- **Cliff-side boardwalks**: Suspended hundreds of meters above the canyon floor
-
-## Tujia Culture
-
-- **Architecture**: Stilted wooden houses (吊脚楼)
-- **Hand-waving dance (摆手舞)**: Traditional group dance
-- **Cuisine**: Sour and spicy Tujia specialties
-
-## Getting There
-
-- **High-speed train**: From Wuhan to Enshi (about 4 hours)
-- **Entrance fee**: 270 RMB
-
-> Enshi Grand Canyon is the kind of place that makes you feel small in the best possible way.`,
-      category: '景点',
-      tags: ['Enshi', 'Grand Canyon', 'Tujia culture', 'karst'],
-      coverImage: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=800&auto=format&fit=crop',
-      readTime: 5,
-    },
-    {
-      id: `f-hubeifood-${today}-${rng()}`,
-      title: "A Food Lover's Guide to Hubei: 10 Dishes You Must Try",
-      summary: 'From Wuhan breakfast stalls to Enshi mountain kitchens, explore Hubei\'s diverse culinary scene.',
-      content: `# A Food Lover's Guide to Hubei: 10 Dishes You Must Try
-
-## 1. Hot Dry Noodles (热干面)
-Alkaline noodles with sesame paste — Wuhan's signature.
-
-## 2. Steamed Wuchang Fish (清蒸武昌鱼)
-Tender bream from Liangzi Lake, steamed with ginger and scallions.
-
-## 3. Doupi (豆皮)
-Crispy mung bean crepe wrapped around sticky rice, pork, and mushrooms.
-
-## 4. Wuhan Duck Neck (武汉鸭脖)
-Spicy, numbing, addictive — the perfect beer snack.
-
-## 5. Lotus Root Soup (莲藕排骨汤)
-Hearty soup with lotus root and pork ribs.
-
-> Hubei's food philosophy: fresh ingredients, bold flavors, tradition.`,
-      category: '美食',
-      tags: ['Hubei food', 'food guide', 'Wuhan food'],
-      coverImage: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop',
-      readTime: 5,
-    },
-    {
-      id: `f-yichang-${today}-${rng()}`,
-      title: 'Yichang Travel Guide: Gateway to the Three Gorges',
-      summary: 'Plan your trip to Yichang with this comprehensive guide covering attractions, food, and travel tips.',
-      content: `# Yichang Travel Guide
-
-Yichang, in western Hubei, is best known as the home of the Three Gorges Dam.
-
-## Top Attractions
-
-- **Three Gorges Dam (三峡大坝)**: The world's largest hydroelectric dam
-- **Three Gorges Tribe (三峡人家)**: Tujia culture living museum
-- **Qingjiang Gallery (清江画廊)**: Scenic boat ride on emerald-green river
-
-## Getting Around
-
-- **High-speed rail**: 2 hours from Wuhan
-- **Airport**: Yichang Sanxia Airport
-
-> Yichang is where the Yangtze begins its most spectacular journey.`,
-      category: '景点',
-      tags: ['Yichang', 'Three Gorges Dam', 'travel guide'],
-      coverImage: 'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=800&auto=format&fit=crop',
       readTime: 4,
+    },
+    {
+      id: `f-visa-${today}-${rng()}`,
+      title: 'China 144-Hour Visa-Free Transit Extended to Wuhan',
+      summary: "Wuhan Tianhe Airport now offers 144-hour visa-free transit for citizens from 54 countries, making Hubei more accessible.",
+      content: `# China 144-Hour Visa-Free Transit Extended to Wuhan
+
+International travelers can now explore Hubei for up to 6 days without a visa.
+
+## How It Works
+
+Citizens from 54 countries including the US, UK, Canada, Australia, and most European nations can transit through Wuhan Tianhe Airport without a visa for up to 144 hours.
+
+## What You Can Do
+
+- Visit Yellow Crane Tower and other Wuhan landmarks
+- Take a day trip to the Three Gorges
+- Explore the city's food scene`,
+      category: '签证',
+      tags: ['visa-free', 'Wuhan', 'China travel', 'transit'],
+      coverImage: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800&auto=format&fit=crop',
+      readTime: 3,
+    },
+    {
+      id: `f-optics-${today}-${rng()}`,
+      title: 'Wuhan Optics Valley: China\'s Photonics Hub Hits New Milestones',
+      summary: 'The Optics Valley of China in Wuhan continues to lead in fiber optics and laser technology innovation.',
+      content: `# Wuhan Optics Valley: China's Photonics Hub Hits New Milestones
+
+Wuhan's Optics Valley (Guanggu) has announced major breakthroughs in fiber optic communications this year.
+
+## Global Recognition
+
+The valley now hosts over 30,000 photonics-related companies and has become one of the world's largest optical fiber production bases.
+
+## Visitor Experience
+
+Tech enthusiasts can visit the Optics Valley exhibition center for a glimpse into the future of photonics technology.`,
+      category: '科技',
+      tags: ['Wuhan', 'Optics Valley', 'technology', 'innovation'],
+      coverImage: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop',
+      readTime: 3,
+    },
+    {
+      id: `f-chu-${today}-${rng()}`,
+      title: 'Ancient Chu Treasures Draw Global Attention to Hubei',
+      summary: 'New archaeological discoveries from the State of Chu are attracting researchers and tourists to Hubei museums.',
+      content: `# Ancient Chu Treasures Draw Global Attention to Hubei
+
+Hubei's 2,500-year-old Chu civilization continues to captivate the world with remarkable archaeological finds.
+
+## The Marquis Yi of Zeng Bells
+
+The 65-bronze-bell set unearthed in Suizhou remains one of China's greatest musical archaeological discoveries.
+
+## Current Exhibitions
+
+The Hubei Provincial Museum in Wuhan now features a dedicated Chu culture hall.`,
+      category: '文化',
+      tags: ['Chu culture', 'Hubei Provincial Museum', 'archaeology', 'history'],
+      coverImage: 'https://images.unsplash.com/photo-1566891439633-e183f5b64d2f?w=800&auto=format&fit=crop',
+      readTime: 4,
+    },
+    {
+      id: `f-rail-${today}-${rng()}`,
+      title: 'Hubei High-Speed Rail Network Expands with New Routes',
+      summary: "New high-speed rail connections make Hubei's top destinations more accessible than ever.",
+      content: `# Hubei High-Speed Rail Network Expands with New Routes
+
+Hubei's railway infrastructure continues to expand, making it easier than ever to explore the province.
+
+## New Connections
+
+- Wuhan to Enshi: now 3 hours
+- Wuhan to Shennongjia: new direct service
+- Yichang to Wuhan: frequent departures every 20 minutes
+
+## Travel Benefits
+
+The high-speed rail network puts most of Hubei's attractions within a 2-3 hour journey from Wuhan.`,
+      category: '文旅',
+      tags: ['high-speed rail', 'Wuhan', 'transportation', 'Hubei travel'],
+      coverImage: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&auto=format&fit=crop',
+      readTime: 3,
     },
   ]
 
   return fallbacks.map(a => ({
     ...a,
-    author: 'HiHubei Travel Editor',
+    author: 'HiHubei News Desk',
     publishDate: now.toISOString(),
   }))
 }
 
-// ─── Read existing articles ───────────────────────────────────────────
+// ─── 读取现有文章 ─────────────────────────────────────────────
 
 function readExistingArticleIds(content) {
   const ids = []
@@ -402,21 +378,7 @@ function readExistingArticleIds(content) {
   return ids
 }
 
-function readExistingArticles(content) {
-  const articles = []
-  const blocks = content.split(/\n  \{\n    id: '/).slice(1)
-  
-  for (const block of blocks) {
-    const id = block.match(/^([^']+)'/)?.[1]
-    if (id) {
-      const title = block.match(/title:\s*'([^']*)'/)?.[1]
-      articles.push({ id, title })
-    }
-  }
-  return articles
-}
-
-// ─── Update articles.ts — replaces entire array ───────────────────────
+// ─── 更新 articles.ts ─────────────────────────────────────────
 
 function updateArticlesFile(newArticles) {
   let content = fs.readFileSync(ARTICLES_FILE, 'utf-8')
@@ -474,68 +436,77 @@ function escapeTS(str) {
     .replace(/\r/g, '')
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────
 
 async function main() {
   console.log('🔄 HiHubei Article Auto-Updater')
   console.log(`📅 ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' })} CST`)
-  console.log(`🤖 DeepSeek API key: ${DEEPSEEK_API_KEY ? '✓ set (' + DEEPSEEK_API_KEY.substring(0, 8) + '...)' : '✗ NOT SET'}`)
+  console.log(`🤖 DeepSeek API key: ${DEEPSEEK_API_KEY ? `✓ set (${DEEPSEEK_API_KEY.substring(0, 8)}...)` : '✗ NOT SET'}`)
+  console.log(`📋 Topics: Culture & Tourism | Visa & Travel Policy | Tech & Innovation | Deep Culture`)
   console.log('')
 
-  // Read existing
   const existingContent = fs.readFileSync(ARTICLES_FILE, 'utf-8')
   const existingIds = readExistingArticleIds(existingContent)
-  const existingArticles = readExistingArticles(existingContent)
   console.log(`📚 Existing articles: ${existingIds.length}`)
 
-  // Generate new articles
   console.log('✍️  Generating articles via DeepSeek AI...')
   console.log('')
 
   const newArticles = []
   const useAI = !!DEEPSEEK_API_KEY
+  const dayOffset = Math.floor(Date.now() / 86400000)
 
-  // Use AI if key available
   if (useAI) {
-    // Generate 7 articles, covering all 4 categories
-    for (let i = 0; i < 7; i++) {
-      const topicIdx = (i + Math.floor(Date.now() / 86400000)) % TOPIC_ROTATIONS.length
-      const catIdx = i % TOPIC_PROMPTS.length
-      const topic = TOPIC_ROTATIONS[topicIdx]
-      const category = TOPIC_PROMPTS[catIdx].category
+    // 每天生成 8 篇文章：每个板块 2 篇
+    const topicSets = [CULTURE_TOPICS, VISA_TOPICS, TECH_TOPICS, DEEP_CULTURE_TOPICS]
+    const cats = CATEGORIES
+    let articleIndex = 0
 
-      console.log(`   [${i + 1}/7] Generating: "${topic.substring(0, 50)}..." (${category})`)
+    for (let s = 0; s < topicSets.length; s++) {
+      const set = topicSets[s]
+      const cat = cats[s]
+      // 每个板块取 2 个不同主题 (用 dayOffset 轮换)
+      const t1 = set[(dayOffset * 2 + 0) % set.length]
+      const t2 = set[(dayOffset * 2 + 1) % set.length]
 
-      const article = await generateArticle(topic, category, i + 1)
-      if (article) {
-        newArticles.push(article)
-        console.log(`   ✅ "${article.title.substring(0, 60)}..."`)
-      } else {
-        console.log(`   ⚠️  Failed, will use fallback`)
+      for (const topic of [t1, t2]) {
+        articleIndex++
+        console.log(`   [${articleIndex}/8] [${cat.name}] "${topic.substring(0, 55)}..."`)
+
+        const article = await generateArticle(topic, cat, articleIndex)
+        if (article) {
+          newArticles.push(article)
+          console.log(`   ✅ "${article.title.substring(0, 60)}..."`)
+        } else {
+          console.log(`   ⚠️  Failed`)
+          // 补一个 fallback
+          const fallbacks = generateFallbackArticles()
+          const f = fallbacks[(articleIndex - 1) % fallbacks.length]
+          f.publishDate = new Date().toISOString()
+          newArticles.push(f)
+          console.log(`   📝 Fallback: "${f.title.substring(0, 60)}..."`)
+        }
+
+        if (articleIndex < 8) await new Promise(r => setTimeout(r, 600))
       }
-
-      // Small delay to avoid rate limits
-      if (i < 6) await new Promise(r => setTimeout(r, 500))
     }
   }
 
-  // If any AI articles failed, fill with fallbacks
-  if (newArticles.length < 7) {
+  // 如果没生成任何文章，用 fallback
+  if (newArticles.length === 0) {
+    console.log('   📝 Using all fallback articles')
     const fallbacks = generateFallbackArticles()
-    const needed = 7 - newArticles.length
-    console.log(`   📝 Adding ${needed} fallback articles`)
-    for (let i = 0; i < needed; i++) {
-      newArticles.push(fallbacks[i])
-    }
+    newArticles.push(...fallbacks)
   }
 
-  // Merge: new first, then old (dedup by title)
+  // 去重合并（新文章在前）
   console.log('')
-  console.log('📚 Merging articles...')
+  console.log('📚 Merging with existing articles...')
 
   const seenTitles = new Set()
   const merged = []
 
+  // 新文章优先
   for (const a of newArticles) {
     if (!seenTitles.has(a.title)) {
       seenTitles.add(a.title)
@@ -543,26 +514,14 @@ async function main() {
     }
   }
 
-  // If no AI, keep old articles that don't conflict
-  if (!useAI) {
-    for (const old of existingArticles) {
-      if (!seenTitles.has(old.title)) {
-        seenTitles.add(old.title)
-        // We can't reconstruct old article from just title/id, so skip for now
-        // In AI mode, this is handled by keeping the existing content
-      }
-    }
-  }
-
-  // Write
-  console.log('💾 Writing articles.ts...')
+  console.log(`💾 Writing ${Math.min(merged.length, MAX_ARTICLES)} articles to articles.ts...`)
   updateArticlesFile(merged.slice(0, MAX_ARTICLES))
 
   console.log('')
   console.log('✅ Done!')
   console.log(`📊 Articles now: ${Math.min(merged.length, MAX_ARTICLES)}`)
   console.log('')
-  console.log('🌐 Build and deploy to see changes:')
+  console.log('🌐 Build and deploy:')
   console.log('   npm run build && npx wrangler pages deploy dist --project-name=hihubei')
 }
 
