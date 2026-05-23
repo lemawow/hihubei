@@ -1,0 +1,70 @@
+name: Auto-Update Articles
+
+on:
+  schedule:
+    # 每天 UTC 2:00 运行 = 北京时间 10:00
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # 也支持手动触发
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run article update script
+        run: node scripts/update-articles.mjs
+        env:
+          # 可选：设置 AI API key 用于真实文章生成
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TZ: 'Asia/Shanghai'
+      
+      - name: Check for changes
+        id: git-check
+        run: |
+          git add src/data/articles.ts
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Pull Request
+        if: steps.git-check.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: '🔄 Auto-update articles (${{ github.run_id }})'
+          title: '🔄 Daily article update — ${{ github.run_id }}'
+          body: |
+            ## Auto-Generated Article Update
+            
+            - **Date**: $(date +'%Y-%m-%d %H:%M CST')
+            - **Language**: English
+            - **Topics**: Hubei tourism attractions, food, culture
+            
+            This PR is automatically created by the daily article update workflow.
+            Merge it to deploy fresh content to hihubei.com.
+            
+            > 🤖 Automated by HiHubei Article Updater
+          branch: auto-update/articles
+          base: main
+          labels: auto-update, articles
+          delete-branch: true
