@@ -47,14 +47,9 @@ async function fetchRSS(url: string): Promise<any[]> {
         || link.match(/https?:\/\/(?:www\.)?([^/]+)/)?.[1]
         || ''
 
-      const cleanDesc = desc
-        .replace(/<[^>]*>/g, '')
-        .replace(/&[a-z]+;/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-
+      // Keep raw description (HTML-escaped); toArticle handles cleaning
       if (title && link) {
-        items.push({ title, link, description: cleanDesc, pubDate: date, source })
+        items.push({ title, link, description: desc, pubDate: date, source })
       }
     }
     return items
@@ -142,17 +137,7 @@ function classifyArticle(title: string, description: string): string {
 
 // ─── 生成正文 ────────────────────────────────────────────────────
 
-function generateContent(title: string, description: string, sourceUrl: string, source: string): string {
-  const lines: string[] = []
-  // 正文：英文描述，截取前 500 字
-  const body = description.replace(/^https?:\/\/[^\s]+/gm, '').trim()
-  if (body.length > 20) {
-    lines.push(body)
-  } else {
-    lines.push(`Latest news from ${source} about ${title}.`)
-  }
-  return lines.join('\n\n')
-}
+
 
 // ─── 格式化日期 ──────────────────────────────────────────────────
 
@@ -167,36 +152,67 @@ function formatPubDate(dateStr: string): string {
   }
 }
 
-function toArticle(item: any, index: number): Article {
-  const title = item.title
-    .replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1')
+function decodeHtmlEntities(text: string): string {
+  return text
     .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/^[-\s]+/, '')
-    .trim()
-    .substring(0, 150)
+    .replace(/&nbsp;/g, ' ')
+}
 
-  const description = item.description
-    .replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&[a-z]+;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/https?:\/\/[^\s]+/g, '')
-    .trim()
+function extractCleanText(html: string): string {
+  // Step 1: decode HTML entities so < and > become real tags
+  let decoded = decodeHtmlEntities(html)
+  // Step 2: CDATA
+  decoded = decoded.replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1')
+  // Step 3: strip all tags
+  decoded = decoded.replace(/<[^>]*>/g, '')
+  // Step 4: decode again (double-encoded)
+  decoded = decodeHtmlEntities(decoded)
+  // Step 5: collapse whitespace
+  return decoded.replace(/\s+/g, ' ').trim()
+}
 
-  const category = classifyArticle(title, description)
-  const keywords = extractKeywords(title + ' ' + description, category)
-  const source = item.source || 'Google News'
+function extractSourceUrl(item: any): string {
+  // Prefer explicit source url from Google News
+  if (item.sourceUrl) return item.sourceUrl
+  // Fallback to the RSS link
+  return item.link || ''
+}
+
+function toArticle(item: any, index: number): Article {
+  const title = extractCleanText(item.title).substring(0, 150)
+
+  // Google News description is HTML: <a href="...">Title</a>&nbsp;&nbsp;<font>Source</font>
+  // Extract the text portion only
+  let bodyText = extractCleanText(item.description)
+
+  // Try to extract actual source from description by parsing the <a> tag
+  const descLinkMatch = item.description.match(/<a[^>]+href="([^"]+)"[^>]*>/i)
+  const actualSource = descLinkMatch?.[1] || item.sourceUrl || item.link
+
+  const category = classifyArticle(title, bodyText)
+  const keywords = extractKeywords(title + ' ' + bodyText, category)
+  const source = item.source || ''
+
+  // Use actual source title + body as content
+  const contentLines: string[] = []
+  if (bodyText && bodyText.length > 20) {
+    contentLines.push(bodyText)
+  } else {
+    contentLines.push(title)
+  }
 
   return {
     id: `news-${index}-${Date.now().toString(36)}`,
     title,
     date: formatPubDate(item.pubDate),
-    content: generateContent(title, description, item.link, source),
+    content: contentLines.join(' '),
     keywords,
     category,
-    sourceUrl: item.link,
+    sourceUrl: actualSource,
   }
 }
 
