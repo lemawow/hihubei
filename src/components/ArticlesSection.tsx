@@ -1,241 +1,222 @@
 import { useState, useEffect } from 'react'
-import { ExternalLink, Clock, Calendar, RefreshCw, AlertCircle } from 'lucide-react'
+import { ExternalLink, RefreshCw, AlertCircle } from 'lucide-react'
 
 interface Article {
   id: string
   title: string
-  summary: string
+  date: string
   content: string
-  coverImage: string
+  keywords: string[]
   category: string
-  tags: string[]
-  author: string
-  publishDate: string
-  readTime: number
   sourceUrl: string
 }
 
-const ALL_CATEGORIES = '全部'
+const ALL = '全部'
 const API_URL = '/api/articles'
-const CATEGORY_EMOJI: Record<string, string> = {
-  '文旅': '🏯',
-  '签证': '🛂',
-  '科技': '🔬',
-  '文化': '📖',
+
+const CAT_LABEL: Record<string, string> = {
+  '文旅': 'Culture & Tourism',
+  '签证': 'Visa & Travel',
+  '科技': 'Tech & Innovation',
+  '文化': 'Deep Culture',
 }
 
-// Fallback articles when API is unavailable
-const FALLBACK_ARTICLES: Article[] = [
+const FALLBACK: Article[] = [
   {
-    id: 'fallback-1',
-    title: 'Welcome to HiHubei — Discover Hubei Province',
-    summary: 'Explore the beauty of Hubei province, from the Three Gorges to Wudang Mountain.',
-    content: '# Welcome to HiHubei\n\nDiscover the best of Hubei province.',
-    coverImage: 'https://images.unsplash.com/photo-1592210454359-9043f067919b?w=800&auto=format&fit=crop',
+    id: 'welcome',
+    title: 'Welcome to HiHubei — Your Gateway to Hubei, China',
+    date: new Date().toISOString(),
+    content: 'HiHubei brings you the latest news and stories from Hubei province, covering culture, tourism, technology, and travel policies. Stay informed about what makes Hubei a unique destination.',
+    keywords: ['Hubei', 'welcome', 'travel', 'culture'],
     category: '文旅',
-    tags: ['Hubei', 'welcome'],
-    author: 'HiHubei',
-    publishDate: new Date().toISOString(),
-    readTime: 2,
     sourceUrl: 'https://hihubei.com',
   },
 ]
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return 'Just now'
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
+function formatDateFull(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    })
+  } catch { return iso }
+}
 
 export default function ArticlesSection() {
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES)
+  const [active, setActive] = useState(ALL)
 
   useEffect(() => {
-    let cancelled = false
-
-    async function loadArticles() {
+    let dead = false
+    async function load() {
       try {
         setLoading(true)
         setError(null)
-        const resp = await fetch(API_URL, { signal: AbortSignal.timeout(10000) })
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        const data: Article[] = await resp.json()
-        if (!cancelled) {
-          setArticles(data.length > 0 ? data : FALLBACK_ARTICLES)
-        }
+        const r = await fetch(API_URL, { signal: AbortSignal.timeout(12000) })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data: Article[] = await r.json()
+        if (!dead) setArticles(data.length > 0 ? data : FALLBACK)
       } catch (e: any) {
-        if (!cancelled) {
-          console.warn('Articles API unavailable, using fallback:', e.message)
-          setError('Could not load live news. Showing sample articles.')
-          setArticles(FALLBACK_ARTICLES)
+        if (!dead) {
+          setError('Could not load live news.')
+          setArticles(FALLBACK)
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!dead) setLoading(false)
       }
     }
-
-    loadArticles()
-    return () => { cancelled = true }
+    load()
+    return () => { dead = true }
   }, [])
 
-  const categories = [ALL_CATEGORIES, ...[...new Set(articles.map(a => a.category))].filter(Boolean)]
-  const filtered = activeCategory === ALL_CATEGORIES
-    ? articles
-    : articles.filter(a => a.category === activeCategory)
+  const cats = [ALL, ...[...new Set(articles.map(a => a.category))].filter(Boolean)]
+  const filtered = active === ALL ? articles : articles.filter(a => a.category === active)
 
   return (
-    <section id="articles" className="py-16 md:py-24 bg-gradient-to-b from-sky-50 to-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Hubei News & Stories
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Latest updates on Hubei's culture, tourism, technology, and travel policies
+    <section id="articles" className="py-16 md:py-24 bg-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* ─── Header ─── */}
+        <div className="mb-10">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Hubei News</h2>
+          <p className="text-gray-500 text-sm flex items-center gap-2">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Loading...' : `Latest articles from around the web`}
+            {error && <span className="text-amber-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{error}</span>}
           </p>
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Loading...' : 'Live'}
-            </span>
-            {error && (
-              <span className="inline-flex items-center gap-1 text-xs text-amber-500">
-                <AlertCircle className="w-3 h-3" />
-                {error}
-              </span>
-            )}
-          </div>
         </div>
 
-        {/* Category Filter */}
-        <div className="flex flex-wrap justify-center gap-2 mb-10">
-          {categories.map((cat) => (
+        {/* ─── Category tabs ─── */}
+        <div className="flex flex-wrap gap-1.5 mb-8 border-b border-gray-200 pb-3">
+          {cats.map(c => (
             <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeCategory === cat
-                  ? 'bg-sky-600 text-white shadow-md shadow-sky-200'
-                  : 'bg-white text-gray-600 hover:bg-sky-50 hover:text-sky-700 border border-gray-200'
+              key={c}
+              onClick={() => setActive(c)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                active === c
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
               }`}
             >
-              {cat !== ALL_CATEGORIES && CATEGORY_EMOJI[cat] ? `${CATEGORY_EMOJI[cat]} ` : ''}
-              {cat}
+              {c === ALL ? 'All' : c}
             </button>
           ))}
         </div>
 
-        {/* Article Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filtered.map((article, index) => (
-            <a
-              key={article.id + "-" + index}
-              href={article.sourceUrl || '#'}
-              target={article.sourceUrl ? '_blank' : undefined}
-              rel={article.sourceUrl ? 'noopener noreferrer' : undefined}
-              className="group bg-white rounded-xl shadow-sm hover:shadow-xl border border-gray-100 overflow-hidden transition-all duration-300 hover:-translate-y-1 flex flex-col"
+        {/* ─── News list ─── */}
+        <div className="space-y-8">
+          {filtered.map((article) => (
+            <article
+              key={article.id}
+              className="border-b border-gray-100 pb-8 last:border-0"
+              itemScope
+              itemType="https://schema.org/NewsArticle"
             >
-              {/* Cover Image */}
-              <div className="relative h-44 overflow-hidden">
-                <img
-                  src={article.coverImage}
-                  alt={article.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  loading="lazy"
-                />
-                {/* Category Badge */}
-                <span className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-full">
-                  {article.category && CATEGORY_EMOJI[article.category]
-                    ? `${CATEGORY_EMOJI[article.category]} ${article.category}`
-                    : '📰 News'}
-                </span>
-                {article.sourceUrl && (
-                  <span className="absolute top-3 right-3 bg-black/40 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </span>
-                )}
+              {/* Schema.org metadata (hidden, for AI/SEO) */}
+              <meta itemProp="headline" content={article.title} />
+              <meta itemProp="datePublished" content={article.date} />
+              <meta itemProp="url" content={article.sourceUrl} />
+
+              {/* ── Date ── */}
+              <time
+                dateTime={article.date}
+                className="block text-xs text-gray-400 font-mono mb-1.5"
+                itemProp="datePublished"
+              >
+                {formatDateFull(article.date)}
+              </time>
+
+              {/* ── Title ── */}
+              <h3 className="text-lg font-semibold text-gray-900 leading-snug mb-2">
+                <a
+                  href={article.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-blue-600 transition-colors inline-flex items-start gap-1.5"
+                  itemProp="url"
+                >
+                  {article.title}
+                  <ExternalLink className="w-3.5 h-3.5 mt-1 shrink-0 text-gray-300" />
+                </a>
+              </h3>
+
+              {/* ── Content / body ── */}
+              <div
+                className="text-sm text-gray-600 leading-relaxed mb-3"
+                itemProp="description"
+              >
+                {article.content.length > 300
+                  ? article.content.slice(0, 500) + '...'
+                  : article.content}
               </div>
 
-              {/* Content */}
-              <div className="p-4 flex flex-col flex-1">
-                {/* Tags */}
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {article.tags.slice(0, 2).map(tag => (
+              {/* ── Keywords ── */}
+              {article.keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 items-center" itemProp="keywords">
+                  {article.keywords.map(kw => (
                     <span
-                      key={tag}
-                      className="text-[10px] uppercase tracking-wider text-sky-500 font-medium"
+                      key={kw}
+                      className="inline-block px-2 py-0.5 text-[11px] font-medium bg-gray-100 text-gray-600 rounded"
                     >
-                      #{tag}
+                      {kw}
                     </span>
                   ))}
                 </div>
+              )}
 
-                {/* Title */}
-                <h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-sky-600 transition-colors leading-snug">
-                  {article.title}
-                </h3>
-
-                {/* Summary */}
-                <p className="text-xs text-gray-500 mb-3 line-clamp-2 flex-1 leading-relaxed">
-                  {article.summary}
-                </p>
-
-                {/* Meta */}
-                <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-gray-100">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(article.publishDate)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {article.readTime} min read
+              {/* ── Category badge ── */}
+              {article.category && (
+                <div className="mt-2">
+                  <span className="inline-block text-[10px] uppercase tracking-wider font-semibold text-gray-400">
+                    {CAT_LABEL[article.category] || 'News'} · <a href={article.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-600">Source</a>
                   </span>
                 </div>
-
-                {/* Source */}
-                <div className="text-[10px] text-gray-400 mt-1.5 truncate">
-                  {article.author && !article.author.includes('HiHubei') ? article.author : article.sourceUrl?.replace(/https?:\/\/(www\.)?/, '').split('/')[0] || 'HiHubei'}
-                </div>
-              </div>
-            </a>
+              )}
+            </article>
           ))}
         </div>
 
-        {/* Empty state */}
+        {/* ── Empty ── */}
         {filtered.length === 0 && !loading && (
-          <div className="text-center py-16">
-            <p className="text-gray-400 text-lg">No articles found for this category.</p>
-          </div>
+          <p className="text-center text-gray-400 py-12">No articles in this category.</p>
         )}
 
-        {/* Loading skeleton */}
+        {/* ── Loading skeleton ── */}
         {loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden animate-pulse">
-                <div className="h-44 bg-gray-200" />
-                <div className="p-4 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-1/3" />
-                  <div className="h-4 bg-gray-200 rounded w-full" />
-                  <div className="h-4 bg-gray-200 rounded w-2/3" />
-                  <div className="h-3 bg-gray-200 rounded w-full" />
-                  <div className="h-3 bg-gray-200 rounded w-1/2" />
-                </div>
+          <div className="space-y-8 animate-pulse">
+            {[1,2,3].map(i => (
+              <div key={i} className="border-b border-gray-100 pb-8">
+                <div className="h-3 bg-gray-200 rounded w-32 mb-3" />
+                <div className="h-5 bg-gray-200 rounded w-full mb-2" />
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-3" />
+                <div className="h-3 bg-gray-200 rounded w-full mb-1" />
+                <div className="h-3 bg-gray-200 rounded w-2/3" />
               </div>
             ))}
           </div>
         )}
+
+        {/* ── AI-visible JSON-LD ── */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'CollectionPage',
+              name: 'HiHubei News',
+              description: 'Latest news about Hubei province, China — culture, tourism, technology, and travel policies.',
+              mainEntity: filtered.map(a => ({
+                '@type': 'NewsArticle',
+                headline: a.title,
+                datePublished: a.date,
+                url: a.sourceUrl,
+                keywords: a.keywords.join(', '),
+                articleSection: a.category,
+              })),
+            }),
+          }}
+        />
       </div>
     </section>
   )

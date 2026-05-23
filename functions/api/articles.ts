@@ -1,30 +1,18 @@
 /**
  * HiHubei Articles API — Cloudflare Pages Function
  *
- * 实时从多个免费 RSS/新闻源抓取湖北文旅/签证/科技/文化相关新闻，
- * 在前端访问时实时返回，无需 AI 生成，节约 token 成本。
- *
- * 数据来源：
- *   1. Google News RSS (Hubei tourism search)
- *   2. en.hubei.gov.cn RSS (湖北省政府英文版新闻)
- *   3. China Daily Hubei news
- *
- * 缓存策略：Workers KV 缓存 6 小时（如已配置 KV）
- *          无 KV 时每次请求实时抓取（有内置 dedupe）
+ * 实时从 Google News RSS 抓取湖北文旅/签证/科技/文化新闻
+ * 返回格式：时间 → 标题 → 正文摘要 → 关键词（便于 AI 检索与前端展示）
  */
 
 interface Article {
   id: string
   title: string
-  summary: string
-  content: string
-  coverImage: string
-  category: string
-  tags: string[]
-  author: string
-  publishDate: string
-  readTime: number
-  sourceUrl: string
+  date: string           // 发布时间（ISO）
+  content: string        // 正文
+  keywords: string[]     // 关键词
+  category: string       // 文旅 | 签证 | 科技 | 文化
+  sourceUrl: string      // 原文链接
 }
 
 const CORS_HEADERS = {
@@ -32,28 +20,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 }
-
-const CATEGORY_MAP: Record<string, Record<string, string>> = {
-  'culture-tourism': { name: '文旅', emoji: '🏯' },
-  'visa-travel':    { name: '签证', emoji: '🛂' },
-  'tech':           { name: '科技', emoji: '🔬' },
-  'deep-culture':   { name: '文化', emoji: '📖' },
-}
-
-const COVER_IMAGES = [
-  'https://images.unsplash.com/photo-1592210454359-9043f067919b?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1544984243-ec57ea16fe25?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1566891439633-e183f5b64d2f?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1555126634-323283e090fa?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&auto=format&fit=crop',
-  'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop',
-]
 
 // ─── RSS Parser ──────────────────────────────────────────────────
 
@@ -66,27 +32,33 @@ async function fetchRSS(url: string): Promise<any[]> {
     if (!resp.ok) return []
     const text = await resp.text()
 
-    // Simple XML parser — extract item>title, link, description, pubDate
     const items: any[] = []
     const itemRegex = /<item>([\s\S]*?)<\/item>/gi
     let match
     while ((match = itemRegex.exec(text)) !== null) {
       const block = match[1]
-      const title = block.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || ''
-      const link = block.match(/<link[^>]*>([^<]*)<\/link>/i)?.[1] || ''
+      const title = (block.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] || '').trim()
+      const link = (block.match(/<link[^>]*>([^<]*)<\/link>/i)?.[1] || '').trim()
       const desc = block.match(/<description[^>]*>([^<]*)<\/description>/i)?.[1] || ''
       const date = block.match(/<pubDate[^>]*>([^<]*)<\/pubDate>/i)?.[1]
         || block.match(/<dc:date[^>]*>([^<]*)<\/dc:date>/i)?.[1]
         || ''
-      const cleanDesc = desc.replace(/<[^>]*>/g, '').trim()
+      const source = block.match(/<source[^>]*>([^<]*)<\/source>/i)?.[1]
+        || link.match(/https?:\/\/(?:www\.)?([^/]+)/)?.[1]
+        || ''
+
+      const cleanDesc = desc
+        .replace(/<[^>]*>/g, '')
+        .replace(/&[a-z]+;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
 
       if (title && link) {
-        items.push({ title, link, description: cleanDesc, pubDate: date })
+        items.push({ title, link, description: cleanDesc, pubDate: date, source })
       }
     }
     return items
   } catch (e) {
-    console.error(`RSS fetch error for ${url}:`, e)
     return []
   }
 }
@@ -98,64 +70,146 @@ async function fetchGoogleNews(query: string): Promise<any[]> {
   return fetchRSS(url)
 }
 
-// ─── 判断分类 ────────────────────────────────────────────────────
+// ─── 分类 + 关键词提取 ──────────────────────────────────────────
 
-function classifyArticle(title: string, description: string): { category: string; tag: string } {
-  const text = (title + ' ' + description).toLowerCase()
+const CATEGORY_RULES: { name: string; tests: RegExp[] }[] = [
+  { name: '签证', tests: [
+    /visa[- ]?free/i, /visa[-\s]/i, /transit/i, /entry policy/i, /immigration/i,
+    /border/i, /airport/i, /customs/i, /travel permit/i, /entry ban/i,
+  ]},
+  { name: '科技', tests: [
+    /technology|digital|5g|ai |artificial intelligence|robot|chip|semiconductor/i,
+    /quantum|innovation|optical|laser|biotech|drone|smart city|automation/i,
+    /startup|electric vehicle|ev |battery|software|cloud|algorithm/i,
+  ]},
+  { name: '文化', tests: [
+    /culture|heritage|museum|festival|art|poem|poetry|opera|calligraphy/i,
+    /craft|folk|traditional|dragon boat|tai chi|martial arts|history/i,
+    /ancient|exhibition|performance|ceremony|spirituality|philosophy/i,
+  ]},
+  { name: '文旅', tests: [
+    /tourism|tourist|travel|destination|attraction|scenic|hotel|restaurant/i,
+    /food|cuisine|gourmet|mountain|river|lake|nature|park|hiking/i,
+    /wudang|three gorges|yellow crane|shennongjia|wuhan|yichang|huangshi/i,
+  ]},
+]
 
-  if (/\b(visa|visa-free|transit|entry|border|customs|airport|flight|immigration)\b/.test(text)) {
-    return { category: '签证', tag: 'visa-travel' }
+function extractKeywords(text: string, category: string): string[] {
+  const lower = text.toLowerCase()
+  const words = new Set<string>()
+
+  // Place names
+  const places = ['wuhan','hubei','yichang','huangshi','xiangyang','jingzhou',
+    'shiyan','xianning','enshi','shennongjia','wudang','yichun','jincheng',
+    'yellow crane tower','three gorges','east lake','optics valley','guanggu',
+    'yangtze river','han river','qichun','chibi','jingmen']
+  for (const p of places) {
+    if (lower.includes(p)) words.add(p)
   }
-  if (/\b(tech|technology|digital|5g|ai |artificial intelligence|robot|chip|semiconductor|quantum|innovation|optical|laser|biotech|drone|smart city|automation|software)\b/.test(text)) {
-    return { category: '科技', tag: 'tech' }
+
+  // Category-specific
+  const catKeywords: Record<string, string[]> = {
+    '签证': ['visa','visa-free','policy','entry','passport','transit','travel permit'],
+    '科技': ['tech','AI','5G','biotech','innovation','digital','semiconductor'],
+    '文化': ['culture','heritage','history','tradition','festival','art','museum'],
+    '文旅': ['tourism','travel','attraction','food','cuisine','nature','mountain'],
   }
-  if (/\b(culture|heritage|museum|festival|art|poem|poetry|opera|calligraphy|craft|folk|traditional|dragon boat|temple|tai chi|martial arts|history|ancient|exhibition|performance)\b/.test(text)) {
-    return { category: '文化', tag: 'deep-culture' }
+  for (const kw of (catKeywords[category] || [])) {
+    if (lower.includes(kw)) words.add(kw)
   }
-  // Default: tourism
-  return { category: '文旅', tag: 'culture-tourism' }
+
+  // Extract capitalized nouns > 3 chars
+  const tokens = text.match(/\b[A-Z][a-z]{2,}\b/g) || []
+  for (const t of tokens) {
+    if (t.length > 3 && !['The','This','That','With','From','China','Chinese','Hubei'].includes(t)) {
+      // Avoid duplicates with place names
+      if (!places.includes(t.toLowerCase())) words.add(t.toLowerCase())
+    }
+  }
+
+  return [...words].slice(0, 8)
 }
 
-// ─── 解析为统一 Article 格式 ────────────────────────────────────
+function classifyArticle(title: string, description: string): string {
+  const text = title + ' ' + description
+  for (const rule of CATEGORY_RULES) {
+    for (const test of rule.tests) {
+      if (test.test(text)) return rule.name
+    }
+  }
+  return '文旅' // default
+}
 
-function toArticle(item: any, index: number, source: string): Article {
-  const now = new Date()
-  const pubDate = item.pubDate ? new Date(item.pubDate) : now
-  const id = `news-${now.toISOString().split('T')[0]}-${String(index).padStart(3, '0')}-${Math.random().toString(36).slice(2, 6)}`
+// ─── 生成正文 ────────────────────────────────────────────────────
 
-  const { category, tag } = classifyArticle(item.title, item.description)
-  const title = item.title.replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1').trim()
-  const description = item.description.replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1').trim()
-  const cleanDesc = description.replace(/<[^>]*>/g, '').substring(0, 200)
-  const words = cleanDesc.split(/\s+/).length + title.split(/\s+/).length
-  const readTime = Math.max(2, Math.ceil(words / 200))
+function generateContent(title: string, description: string, sourceUrl: string, source: string): string {
+  const lines: string[] = []
+  // 正文：英文描述，截取前 500 字
+  const body = description.replace(/^https?:\/\/[^\s]+/gm, '').trim()
+  if (body.length > 20) {
+    lines.push(body)
+  } else {
+    lines.push(`Latest news from ${source} about ${title}.`)
+  }
+  return lines.join('\n\n')
+}
+
+// ─── 格式化日期 ──────────────────────────────────────────────────
+
+function formatPubDate(dateStr: string): string {
+  if (!dateStr) return new Date().toISOString()
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return new Date().toISOString()
+    return d.toISOString()
+  } catch {
+    return new Date().toISOString()
+  }
+}
+
+function toArticle(item: any, index: number): Article {
+  const title = item.title
+    .replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/^[-\s]+/, '')
+    .trim()
+    .substring(0, 150)
+
+  const description = item.description
+    .replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&[a-z]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/https?:\/\/[^\s]+/g, '')
+    .trim()
+
+  const category = classifyArticle(title, description)
+  const keywords = extractKeywords(title + ' ' + description, category)
+  const source = item.source || 'Google News'
 
   return {
-    id,
-    title: title.replace(/^[-\s]+/, '').substring(0, 100),
-    summary: cleanDesc.substring(0, 200) || `Latest ${source} article about ${tag} in Hubei.`,
-    content: `# ${title}\n\n${cleanDesc}\n\n[Read full article on ${source}](${item.link})`,
-    coverImage: COVER_IMAGES[index % COVER_IMAGES.length],
+    id: `news-${index}-${Date.now().toString(36)}`,
+    title,
+    date: formatPubDate(item.pubDate),
+    content: generateContent(title, description, item.link, source),
+    keywords,
     category,
-    tags: [tag, 'Hubei', source.toLowerCase().replace(/\s+/g, '-')],
-    author: source,
-    publishDate: pubDate.toISOString(),
-    readTime,
     sourceUrl: item.link,
   }
 }
 
-// ─── 主处理逻辑 ──────────────────────────────────────────────────
+// ─── 主逻辑 ──────────────────────────────────────────────────────
 
 async function fetchArticles(): Promise<Article[]> {
   const queries = [
-    'Hubei China tourism',
-    'Wuhan travel culture',
-    'Hubei visa policy China',
+    'Hubei China tourism travel',
     'Wuhan technology innovation',
+    'Hubei visa travel policy China',
+    'Hubei culture heritage festival',
   ]
 
-  console.log('[HiHubei API] Fetching articles from Google News RSS...')
   const allItems: any[] = []
   const seenLinks = new Set<string>()
 
@@ -167,27 +221,9 @@ async function fetchArticles(): Promise<Article[]> {
         allItems.push(item)
       }
     }
-    // Small delay between queries
-    await new Promise(r => setTimeout(r, 300))
+    await new Promise(r => setTimeout(r, 200))
   }
 
-  console.log(`[HiHubei API] Fetched ${allItems.length} unique items`)
-
-  // Also try en.hubei.gov.cn RSS
-  try {
-    const govItems = await fetchRSS('https://en.hubei.gov.cn/rss/news.xml')
-    for (const item of govItems) {
-      if (!seenLinks.has(item.link)) {
-        seenLinks.add(item.link)
-        allItems.push(item)
-      }
-    }
-    console.log(`[HiHubei API] + ${govItems.length} from hubei.gov.cn`)
-  } catch (e) {
-    console.warn('[HiHubei API] hubei.gov.cn RSS unavailable')
-  }
-
-  // Convert to articles, dedupe by title
   const seenTitles = new Set<string>()
   const articles: Article[] = []
 
@@ -196,63 +232,45 @@ async function fetchArticles(): Promise<Article[]> {
     const title = item.title.replace(/<!\[CDATA\[([^\]]*)\]\]>/g, '$1').trim()
     if (!title || seenTitles.has(title)) continue
     seenTitles.add(title)
-
-    const source = item.link?.includes('hubei.gov.cn') ? 'en.hubei.gov.cn' : 'Google News'
-    articles.push(toArticle(item, articles.length, source))
+    articles.push(toArticle(item, articles.length))
   }
 
-  // Sort by publish date (newest first)
-  articles.sort((a, b) => new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime())
-
-  return articles.slice(0, 30) // max 30 articles
+  articles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  return articles.slice(0, 30)
 }
 
-// ─── KV Cache (if available) ─────────────────────────────────────
-
-async function getCachedArticles(env: any): Promise<Article[] | null> {
-  if (!env?.HIHUBEI_CACHE) return null
-  try {
-    const cached = await env.HIHUBEI_CACHE.get('articles', 'json')
-    if (cached && Array.isArray(cached)) {
-      return cached as Article[]
-    }
-  } catch {}
-  return null
-}
-
-async function setCachedArticles(env: any, articles: Article[]): Promise<void> {
-  if (!env?.HIHUBEI_CACHE) return
-  try {
-    await env.HIHUBEI_CACHE.put('articles', JSON.stringify(articles), {
-      expirationTtl: 21600, // 6 hours
-    })
-  } catch {}
-}
-
-// ─── Request Handler ─────────────────────────────────────────────
+// ─── Handler ─────────────────────────────────────────────────────
 
 export async function onRequest(context: { request: Request; env: any }): Promise<Response> {
   const { request, env } = context
 
-  // CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
-
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      status: 405, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
   try {
-    // Try cache first
-    let articles = await getCachedArticles(env)
+    let articles: Article[] | null = null
+
+    // Try KV cache first
+    if (env?.HIHUBEI_CACHE) {
+      try {
+        const cached = await env.HIHUBEI_CACHE.get('articles', 'json')
+        if (cached && Array.isArray(cached)) articles = cached as Article[]
+      } catch {}
+    }
 
     if (!articles) {
       articles = await fetchArticles()
-      await setCachedArticles(env, articles)
+      if (env?.HIHUBEI_CACHE) {
+        try {
+          await env.HIHUBEI_CACHE.put('articles', JSON.stringify(articles), { expirationTtl: 21600 })
+        } catch {}
+      }
     }
 
     return new Response(JSON.stringify(articles), {
@@ -264,8 +282,7 @@ export async function onRequest(context: { request: Request; env: any }): Promis
       },
     })
   } catch (err: any) {
-    console.error('[HiHubei API] Error:', err.message)
-    return new Response(JSON.stringify({ error: 'Failed to fetch articles', articles: [] }), {
+    return new Response(JSON.stringify({ error: err.message, articles: [] }), {
       status: 500,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
