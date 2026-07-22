@@ -29,7 +29,7 @@ export interface Article {
 const articles: Article[] = [
 
   {
-    id: 'f-shennongjia-2026-07-21-9c7r5b',
+    id: 'f-shennongjia-2026-07-22-8tlj7m',
     title: 'Shennongjia Eco-Tourism Sees Record Visitor Numbers in 2026',
     summary: 'Hubei\'s Shennongjia forest region reports growing international visitor numbers, driven by new eco-tourism initiatives.',
     content: '# Shennongjia Eco-Tourism Sees Record Visitor Numbers in 2026\n\nShennongjia, one of China\'s most biodiverse regions, has seen a surge in international visitors this year as new eco-tourism programs take effect.\n\n## Conservation and Tourism Balance\n\nThe UNESCO World Heritage site has introduced new guided nature trails and wildlife observation programs.\n\n> Shennongjia\'s approach to sustainable tourism has become a model for other protected areas in China.\n\n## New Facilities\n\nA new visitor center at the Shennong Peak base opened this spring.',
@@ -37,11 +37,11 @@ const articles: Article[] = [
     category: '文旅',
     tags: ['Shennongjia', 'eco-tourism', 'UNESCO', 'Hubei travel'],
     author: 'HiHubei News Desk',
-    publishDate: '2026-07-21T05:26:16.478Z',
+    publishDate: '2026-07-22T05:25:17.700Z',
     readTime: 4,
   },
   {
-    id: 'f-visa-2026-07-21-dry3e8',
+    id: 'f-visa-2026-07-22-qreeby',
     title: 'China 144-Hour Visa-Free Transit Extended to Wuhan',
     summary: 'Wuhan Tianhe Airport now offers 144-hour visa-free transit for citizens from 54 countries, making Hubei more accessible.',
     content: '# China 144-Hour Visa-Free Transit Extended to Wuhan\n\nInternational travelers can now explore Hubei for up to 6 days without a visa.\n\n## How It Works\n\nCitizens from 54 countries including the US, UK, Canada, Australia, and most European nations can transit through Wuhan Tianhe Airport without a visa for up to 144 hours.\n\n## What You Can Do\n\n- Visit Yellow Crane Tower and other Wuhan landmarks\n- Take a day trip to the Three Gorges\n- Explore the city\'s food scene',
@@ -49,11 +49,11 @@ const articles: Article[] = [
     category: '签证',
     tags: ['visa-free', 'Wuhan', 'China travel', 'transit'],
     author: 'HiHubei News Desk',
-    publishDate: '2026-07-21T05:26:17.411Z',
+    publishDate: '2026-07-22T05:25:18.617Z',
     readTime: 3,
   },
   {
-    id: 'f-optics-2026-07-21-neme7g',
+    id: 'f-optics-2026-07-22-lwnhg4',
     title: 'Wuhan Optics Valley: China\'s Photonics Hub Hits New Milestones',
     summary: 'The Optics Valley of China in Wuhan continues to lead in fiber optics and laser technology innovation.',
     content: '# Wuhan Optics Valley: China\'s Photonics Hub Hits New Milestones\n\nWuhan\'s Optics Valley (Guanggu) has announced major breakthroughs in fiber optic communications this year.\n\n## Global Recognition\n\nThe valley now hosts over 30,000 photonics-related companies and has become one of the world\'s largest optical fiber production bases.\n\n## Visitor Experience\n\nTech enthusiasts can visit the Optics Valley exhibition center for a glimpse into the future of photonics technology.',
@@ -61,11 +61,11 @@ const articles: Article[] = [
     category: '科技',
     tags: ['Wuhan', 'Optics Valley', 'technology', 'innovation'],
     author: 'HiHubei News Desk',
-    publishDate: '2026-07-21T05:26:18.316Z',
+    publishDate: '2026-07-22T05:25:19.516Z',
     readTime: 3,
   },
   {
-    id: 'f-chu-2026-07-21-5l9gh8',
+    id: 'f-chu-2026-07-22-6mvrk2',
     title: 'Ancient Chu Treasures Draw Global Attention to Hubei',
     summary: 'New archaeological discoveries from the State of Chu are attracting researchers and tourists to Hubei museums.',
     content: '# Ancient Chu Treasures Draw Global Attention to Hubei\n\nHubei\'s 2,500-year-old Chu civilization continues to captivate the world with remarkable archaeological finds.\n\n## The Marquis Yi of Zeng Bells\n\nThe 65-bronze-bell set unearthed in Suizhou remains one of China\'s greatest musical archaeological discoveries.\n\n## Current Exhibitions\n\nThe Hubei Provincial Museum in Wuhan now features a dedicated Chu culture hall.',
@@ -73,11 +73,11 @@ const articles: Article[] = [
     category: '文化',
     tags: ['Chu culture', 'Hubei Provincial Museum', 'archaeology', 'history'],
     author: 'HiHubei News Desk',
-    publishDate: '2026-07-21T05:26:19.211Z',
+    publishDate: '2026-07-22T05:25:20.427Z',
     readTime: 4,
   },
   {
-    id: 'f-rail-2026-07-21-ld6iz1',
+    id: 'f-rail-2026-07-22-2gyx4a',
     title: 'Hubei High-Speed Rail Network Expands with New Routes',
     summary: 'New high-speed rail connections make Hubei\'s top destinations more accessible than ever.',
     content: '# Hubei High-Speed Rail Network Expands with New Routes\n\nHubei\'s railway infrastructure continues to expand, making it easier than ever to explore the province.\n\n## New Connections\n\n- Wuhan to Enshi: now 3 hours\n- Wuhan to Shennongjia: new direct service\n- Yichang to Wuhan: frequent departures every 20 minutes\n\n## Travel Benefits\n\nThe high-speed rail network puts most of Hubei\'s attractions within a 2-3 hour journey from Wuhan.',
@@ -85,7 +85,7 @@ const articles: Article[] = [
     category: '文旅',
     tags: ['high-speed rail', 'Wuhan', 'transportation', 'Hubei travel'],
     author: 'HiHubei News Desk',
-    publishDate: '2026-07-21T05:26:20.123Z',
+    publishDate: '2026-07-22T05:25:21.334Z',
     readTime: 3,
   }
 
